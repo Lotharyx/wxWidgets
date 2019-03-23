@@ -62,44 +62,53 @@ wxIMPLEMENT_DYNAMIC_CLASS(wxJoystick, wxObject);
 class wxJoystickThread : public wxThread
 {
 public:
-    wxJoystickThread(int device, int joystick);
+    wxJoystickThread(int device, int joystick, bool use_zmove = true);
     void* Entry() wxOVERRIDE;
 
 private:
-    void      SendEvent(wxEventType type, long ts, int change = 0);
+    void      SendEvent(wxEventType type, long ts, int change = 0, int axis_change = 0);
     int       m_device;
     int       m_joystick;
     wxPoint   m_lastposition;
-    int       m_axe[wxJS_MAX_AXES];
+    int       m_axis[wxJS_MAX_AXES];
     int       m_buttons;
     wxWindow* m_catchwin;
     int       m_polling;
     int       m_threshold;
+    bool      m_use_zmove;
 
     friend class wxJoystick;
 };
 
 
-wxJoystickThread::wxJoystickThread(int device, int joystick)
+wxJoystickThread::wxJoystickThread(int device, int joystick, bool use_zmove)
     : m_device(device),
       m_joystick(joystick),
       m_lastposition(wxDefaultPosition),
       m_buttons(0),
       m_catchwin(NULL),
       m_polling(0),
-      m_threshold(0)
+      m_threshold(0),
+      m_use_zmove(use_zmove)
 {
-    memset(m_axe, 0, sizeof(m_axe));
+    memset(m_axis, 0, sizeof(m_axis));
 }
 
-void wxJoystickThread::SendEvent(wxEventType type, long ts, int change)
+void wxJoystickThread::SendEvent(wxEventType type, long ts, int change, int axis_change)
 {
-    wxJoystickEvent jwx_event(type, m_buttons, m_joystick, change);
+    wxJoystickEvent jwx_event(type, m_buttons, m_joystick, change, axis_change);
 
     jwx_event.SetTimestamp(ts);
     jwx_event.SetPosition(m_lastposition);
-    jwx_event.SetZPosition(m_axe[wxJS_AXIS_Z]);
     jwx_event.SetEventObject(m_catchwin);
+
+    if(m_use_zmove)
+    {
+        jwx_event.SetZPosition(m_axis[wxJS_AXIS_Z]);
+    } else {
+        jwx_event.SetAllAxes(m_axis);
+    }
+
 
     if (m_catchwin)
         m_catchwin->GetEventHandler()->AddPendingEvent(jwx_event);
@@ -149,31 +158,37 @@ void* wxJoystickThread::Entry()
                     continue;
                 }
 
-                if (   (m_axe[j_evt.number] + m_threshold < j_evt.value)
-                    || (m_axe[j_evt.number] - m_threshold > j_evt.value) )
-            {
-                m_axe[j_evt.number] = j_evt.value;
-
-                switch (j_evt.number)
+                if (   (m_axis[j_evt.number] + m_threshold < j_evt.value)
+                    || (m_axis[j_evt.number] - m_threshold > j_evt.value) )
                 {
-                    case wxJS_AXIS_X:
-                        m_lastposition.x = j_evt.value;
-                        SendEvent(wxEVT_JOY_MOVE, j_evt.time);
-                        break;
-                    case wxJS_AXIS_Y:
-                        m_lastposition.y = j_evt.value;
-                        SendEvent(wxEVT_JOY_MOVE, j_evt.time);
-                        break;
-                    case wxJS_AXIS_Z:
-                        SendEvent(wxEVT_JOY_ZMOVE, j_evt.time);
-                        break;
-                    default:
-                        SendEvent(wxEVT_JOY_MOVE, j_evt.time);
-                        // TODO: There should be a way to indicate that the event
-                        //       is for some other axes.
-                        break;
+                    m_axis[j_evt.number] = j_evt.value;
+                    if(m_use_zmove)
+                    {
+                        switch (j_evt.number)
+                        {
+                            case wxJS_AXIS_X:
+                                m_lastposition.x = j_evt.value;
+                                SendEvent(wxEVT_JOY_MOVE, j_evt.time);
+                                break;
+                            case wxJS_AXIS_Y:
+                                m_lastposition.y = j_evt.value;
+                                SendEvent(wxEVT_JOY_MOVE, j_evt.time);
+                                break;
+                            case wxJS_AXIS_Z:
+                                SendEvent(wxEVT_JOY_ZMOVE, j_evt.time);
+                                break;
+                            default:
+                                SendEvent(wxEVT_JOY_MOVE, j_evt.time);
+                                // TODO: There should be a way to indicate that the event
+                                //       is for some other axes.
+                                break;
+                        }
+                    } else {
+                        m_lastposition.x = m_axis[wxJS_AXIS_X];
+                        m_lastposition.y = m_axis[wxJS_AXIS_Y];
+                        SendEvent(wxEVT_JOY_MOVE, j_evt.time, 0, j_evt.number);
+                    }
                 }
-            }
             }
 
             if ( (j_evt.type & JS_EVENT_BUTTON) && (j_evt.number < wxJS_MAX_BUTTONS) )
@@ -198,7 +213,7 @@ void* wxJoystickThread::Entry()
 
 ////////////////////////////////////////////////////////////////////////////
 
-wxJoystick::wxJoystick(int joystick)
+wxJoystick::wxJoystick(int joystick, bool useZMove)
     : m_device(-1),
       m_joystick(joystick),
       m_thread(NULL)
@@ -218,7 +233,7 @@ wxJoystick::wxJoystick(int joystick)
 
     if (m_device != -1)
     {
-        m_thread = new wxJoystickThread(m_device, m_joystick);
+        m_thread = new wxJoystickThread(m_device, m_joystick, useZMove);
         m_thread->Create();
         m_thread->Run();
     }
@@ -249,14 +264,14 @@ wxPoint wxJoystick::GetPosition() const
 int wxJoystick::GetPosition(unsigned axis) const
 {
     if (m_thread && (axis < wxJS_MAX_AXES))
-        return m_thread->m_axe[axis];
+        return m_thread->m_axis[axis];
     return 0;
 }
 
 int wxJoystick::GetZPosition() const
 {
     if (m_thread)
-        return m_thread->m_axe[wxJS_AXIS_Z];
+        return m_thread->m_axis[wxJS_AXIS_Z];
     return 0;
 }
 
@@ -287,21 +302,21 @@ int wxJoystick::GetPOVCTSPosition() const
 int wxJoystick::GetRudderPosition() const
 {
     if (m_thread)
-        return m_thread->m_axe[wxJS_AXIS_RUDDER];
+        return m_thread->m_axis[wxJS_AXIS_RUDDER];
     return 0;
 }
 
 int wxJoystick::GetUPosition() const
 {
     if (m_thread)
-        return m_thread->m_axe[wxJS_AXIS_U];
+        return m_thread->m_axis[wxJS_AXIS_U];
     return 0;
 }
 
 int wxJoystick::GetVPosition() const
 {
     if (m_thread)
-        return m_thread->m_axe[wxJS_AXIS_V];
+        return m_thread->m_axis[wxJS_AXIS_V];
     return 0;
 }
 

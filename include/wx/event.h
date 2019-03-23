@@ -2708,26 +2708,35 @@ enum
     wxJOY_BUTTON4    = 8
 };
 
+enum {
+    wxJOY_MAX_AXES = 15, // Support up to 15 axes (based on wxJS_MAX_AXES found in joystick.cpp)
+};
+
 class WXDLLIMPEXP_CORE wxJoystickEvent : public wxEvent
 {
 protected:
     wxPoint   m_pos;
     int       m_zPosition;
-    int       m_buttonChange;   // Which button changed?
-    int       m_buttonState;    // Which buttons are down?
-    int       m_joyStick;       // Which joystick?
+    int       m_buttonChange;           // Which button changed?
+    int       m_buttonState;            // Which buttons are down?
+    int       m_joyStick;               // Which joystick?
+    int       m_axes[wxJOY_MAX_AXES];   // What are all the axis positions?
+    int       m_axisChange;             // Which axis moved?
 
 public:
     wxJoystickEvent(wxEventType type = wxEVT_NULL,
                     int state = 0,
                     int joystick = wxJOYSTICK1,
-                    int change = 0)
+                    int change = 0,
+                    int axis_change = 0
+                   )
         : wxEvent(0, type),
           m_pos(),
           m_zPosition(0),
           m_buttonChange(change),
           m_buttonState(state),
-          m_joyStick(joystick)
+          m_joyStick(joystick),
+          m_axisChange(axis_change)
     {
     }
     wxJoystickEvent(const wxJoystickEvent& event)
@@ -2736,20 +2745,32 @@ public:
           m_zPosition(event.m_zPosition),
           m_buttonChange(event.m_buttonChange),
           m_buttonState(event.m_buttonState),
-          m_joyStick(event.m_joyStick)
-    { }
+          m_joyStick(event.m_joyStick),
+          m_axisChange(event.m_axisChange)
+    {
+        // memcpy is used elsewhere, so...
+        memcpy(m_axes, event.m_axes, sizeof(m_axes));
+    }
 
     wxPoint GetPosition() const { return m_pos; }
     int GetZPosition() const { return m_zPosition; }
+    int GetAxisPosition() const { return m_axes[m_axisChange]; }
     int GetButtonState() const { return m_buttonState; }
     int GetButtonChange() const { return m_buttonChange; }
+    int GetAxisChange() const { return m_axisChange; }
     int GetJoystick() const { return m_joyStick; }
 
     void SetJoystick(int stick) { m_joyStick = stick; }
     void SetButtonState(int state) { m_buttonState = state; }
     void SetButtonChange(int change) { m_buttonChange = change; }
+    void SetAxisChange(int change) { m_axisChange = change; }
     void SetPosition(const wxPoint& pos) { m_pos = pos; }
     void SetZPosition(int zPos) { m_zPosition = zPos; }
+    // Note: if joystick.cpp's definition of axis array changes length,
+    // this method will catch it at compile time
+    void SetAllAxes(const int (& axis_source_array)[wxJOY_MAX_AXES]) {
+        memcpy(m_axes, axis_source_array, sizeof(m_axes));
+    }
 
     // Was it a button event? (*doesn't* mean: is any button *down*?)
     bool IsButton() const { return ((GetEventType() == wxEVT_JOY_BUTTON_DOWN) ||

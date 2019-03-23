@@ -23,7 +23,7 @@ public:
      * Public interface
      */
 
-    wxJoystick(int joystick = wxJOYSTICK1);
+    wxJoystick(int joystick = wxJOYSTICK1, bool useZMove = true);
     virtual ~wxJoystick();
 
     // Attributes

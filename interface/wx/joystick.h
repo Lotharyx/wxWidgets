@@ -23,8 +23,11 @@ public:
 
         @a joystick may be one of wxJOYSTICK1, wxJOYSTICK2, indicating the joystick
         controller of interest.
-    */
-    wxJoystick(int joystick = wxJOYSTICK1);
+        @param useZMove
+            If true (the default), Z-axis movements will be handled separately (legacy wxEVENT_JOY_ZMOVE).
+            If false, Z-axis movements will be combined into wxEVENT_JOY_MOVE and all axis values will be available in the wxJoystickEvent object
+   */
+    wxJoystick(int joystick = wxJOYSTICK1, bool useZMove = true);
 
     /**
         Destroys the wxJoystick object.
